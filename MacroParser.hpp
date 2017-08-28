@@ -678,6 +678,8 @@ namespace MacroParser
                         m_scanner.match_get("||", str) ||
                         m_scanner.match_get("|", str) ||
                         m_scanner.match_get("!=", str) ||
+                        m_scanner.match_get("##", str) ||
+                        m_scanner.match_get("#", str) ||
                         m_scanner.match_get("!", str))
                     {
                         Token token(str, TOK_SYMBOL);
