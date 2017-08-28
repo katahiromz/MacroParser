@@ -111,6 +111,7 @@ namespace MacroParser
             std::printf("(%d %s %d)", (int)m_type, m_str.c_str(), m_integer);
         }
     };
+    typedef std::vector<Token> tokens_type;
 
     /////////////////////////////////////////////////////////////////////////
 
@@ -165,7 +166,6 @@ namespace MacroParser
     class TokenStream
     {
     public:
-        typedef std::vector<Token> tokens_type;
         tokens_type     m_tokens;
 
         TokenStream(StringScanner& scanner);
@@ -207,7 +207,6 @@ namespace MacroParser
 
     enum AstID
     {
-        ASTID_BASE,
         ASTID_BINARY,
         ASTID_CALL,
         ASTID_COMMA,
@@ -357,9 +356,10 @@ namespace MacroParser
 
     struct CommaAst : public BaseAst
     {
+        bool m_is_arglist;
         std::vector<BaseAst *> m_args;
 
-        CommaAst() : BaseAst(ASTID_COMMA)
+        CommaAst(bool is_arglist) : BaseAst(ASTID_COMMA), m_is_arglist(is_arglist)
         {
         }
         ~CommaAst()
@@ -744,7 +744,7 @@ namespace MacroParser
 
         if (type() == TOK_SYMBOL && str() == ",")
         {
-            CommaAst *comma = new CommaAst();
+            CommaAst *comma = new CommaAst(false);
             do
             {
                 next();
@@ -1138,7 +1138,7 @@ namespace MacroParser
     // <argument_list> ::= <constant_expression> (',' <constant_expression>)*
     inline CommaAst* Parser::visit_argument_list()
     {
-        CommaAst *comma = new CommaAst();
+        CommaAst *comma = new CommaAst(true);
         BaseAst *expr = visit_constant_expression();
         if (expr == NULL)
         {
