@@ -7,6 +7,7 @@
 #include <vector>
 #include <cstdio>
 #include <cassert>
+#include <cstring>
 
 /////////////////////////////////////////////////////////////////////////
 // the BNF (subset of C language:
@@ -75,6 +76,8 @@ namespace MacroParser
     {
         return isalpha(ch) || isdigit(ch);
     }
+#undef iscsymf
+#undef iscsym
     inline bool iscsymf(char ch)
     {
         return isalpha(ch) || ch == '_';
@@ -436,6 +439,10 @@ namespace MacroParser
     public:
         Parser(TokenStream& stream) : m_stream(stream), m_ast(NULL)
         {
+        }
+        ~Parser()
+        {
+            delete m_ast;
         }
 
         BaseAst *ast() const
