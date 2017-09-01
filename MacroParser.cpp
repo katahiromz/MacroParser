@@ -4,7 +4,7 @@ int main(void)
 {
     {
         using namespace MacroParser;
-        StringScanner scanner("(123+444)");
+        StringScanner scanner("(3%2)+1");
         TokenStream stream(scanner);
         if (!stream.read_tokens())
         {
