@@ -1,3 +1,6 @@
+// MacroParser.hpp
+/////////////////////////////////////////////////////////////////////////
+
 #ifndef MACROPARSER_HPP_
 #define MACROPARSER_HPP_
 
@@ -34,7 +37,6 @@
 //                        | <constant>
 //                        | <string>
 //                        | '(' <constant_expression> ')'
-// <argument_list> ::= <constant_expression> (',' <constant_expression>)*
 namespace MacroParser
 {
     typedef std::string string_type;
@@ -211,7 +213,6 @@ namespace MacroParser
     enum AstID
     {
         ASTID_BINARY,
-        ASTID_CALL,
         ASTID_COMMA,
         ASTID_IDENT,
         ASTID_INTEGER,
@@ -371,10 +372,9 @@ namespace MacroParser
 
     struct CommaAst : public BaseAst
     {
-        bool m_is_arglist;
         std::vector<BaseAst *> m_args;
 
-        CommaAst(bool is_arglist) : BaseAst(ASTID_COMMA), m_is_arglist(is_arglist)
+        CommaAst() : BaseAst(ASTID_COMMA)
         {
         }
         ~CommaAst()
@@ -402,33 +402,6 @@ namespace MacroParser
                 }
             }
             std::printf(">");
-        }
-    };
-
-    struct CallAst : public BaseAst
-    {
-        BaseAst *m_callee;
-        CommaAst *m_comma;
-
-        CallAst(BaseAst *callee, CommaAst *comma)
-            : BaseAst(ASTID_CALL), m_callee(callee), m_comma(comma)
-        {
-        }
-        void add(BaseAst *ast)
-        {
-            m_comma->add(ast);
-        }
-        ~CallAst()
-        {
-            delete m_callee;
-            delete m_comma;
-        }
-        virtual void print() const
-        {
-            BaseAst::print();
-            std::printf("call;");
-            m_callee->print();
-            m_comma->print();
         }
     };
 
@@ -474,11 +447,6 @@ namespace MacroParser
             return visit_primary_expression();
         }
         BaseAst *visit_primary_expression();
-        CommaAst *visit_argument_list();
-        BaseAst *visit_argument()
-        {
-            return visit_constant_expression();
-        }
 
     protected:
         TokenStream m_stream;
@@ -513,6 +481,8 @@ namespace MacroParser
             return m_stream.str();
         }
     };
+
+    bool eval_ast(const BaseAst *ast, int& value);
 
     /////////////////////////////////////////////////////////////////////////
 
@@ -697,8 +667,6 @@ namespace MacroParser
                         m_scanner.match_get("||", str) ||
                         m_scanner.match_get("|", str) ||
                         m_scanner.match_get("!=", str) ||
-                        m_scanner.match_get("##", str) ||
-                        m_scanner.match_get("#", str) ||
                         m_scanner.match_get("!", str))
                     {
                         Token token(str, TOK_SYMBOL);
@@ -765,7 +733,7 @@ namespace MacroParser
 
         if (type() == TOK_SYMBOL && str() == ",")
         {
-            CommaAst *comma = new CommaAst(false);
+            CommaAst *comma = new CommaAst();
             do
             {
                 next();
@@ -1116,7 +1084,6 @@ namespace MacroParser
     inline BaseAst* Parser::visit_primary_expression()
     {
         BaseAst *ast;
-        size_t i;
         switch (type())
         {
         case TOK_IDENT:
@@ -1156,30 +1123,121 @@ namespace MacroParser
         return ast;
     }
 
-    // <argument_list> ::= <constant_expression> (',' <constant_expression>)*
-    inline CommaAst* Parser::visit_argument_list()
+    inline bool eval_binary(const BaseAst *ast, int& value)
     {
-        CommaAst *comma = new CommaAst(true);
-        BaseAst *expr = visit_constant_expression();
-        if (expr == NULL)
+        const BinaryAst *binary = (const BinaryAst *)ast;
+        int left, right;
+        if (!eval_ast(binary->m_left, left) || !eval_ast(binary->m_right, right))
         {
-            delete comma;
-            return NULL;
+            value = 0;
+            return false;
         }
 
-        comma->add(expr);
-        while (type() == TOK_SYMBOL && str() == ",")
+        if (binary->m_str == "+") value = left + right;
+        else if (binary->m_str == "-") value = left - right;
+        else if (binary->m_str == "*") value = left * right;
+        else if (binary->m_str == "/") value = left / right;
+        else if (binary->m_str == "%") value = left % right;
+        else if (binary->m_str == "^") value = left ^ right;
+        else if (binary->m_str == "<<") value = left << right;
+        else if (binary->m_str == "<=") value = left <= right;
+        else if (binary->m_str == "<") value = left < right;
+        else if (binary->m_str == ">>") value = left >> right;
+        else if (binary->m_str == ">=") value = left >= right;
+        else if (binary->m_str == ">") value = left > right;
+        else if (binary->m_str == "==") value = left == right;
+        else if (binary->m_str == "&&") value = left && right;
+        else if (binary->m_str == "&") value = left & right;
+        else if (binary->m_str == "||") value = left || right;
+        else if (binary->m_str == "|") value = left | right;
+        else if (binary->m_str == "!=") value = left != right;
+        else return false;
+        return true;
+    }
+    inline bool eval_comma(const BaseAst *ast, int& value)
+    {
+        const CommaAst *comma = (const CommaAst *)ast;
+        if (comma->m_args.empty())
         {
-            next();
-            expr = visit_constant_expression();
-            if (expr == NULL)
-            {
-                delete comma;
-                return NULL;
-            }
-            comma->add(expr);
+            value = 0;
+            return false;
         }
-        return comma;
+        return eval_ast(comma->m_args[comma->m_args.size() - 1], value);
+    }
+    inline bool eval_ident(const BaseAst *ast, int& value)
+    {
+        value = 0;
+        return false;
+    }
+    inline bool eval_integer(const BaseAst *ast, int& value)
+    {
+        const IntegerAst *integer = (const IntegerAst *)ast;
+        value = integer->m_value;
+        return true;
+    }
+    inline bool eval_string(const BaseAst *ast, int& value)
+    {
+        //const StringAst *str = (const StringAst *)ast;
+        value = 0;
+        return false;
+    }
+    inline bool eval_triple(const BaseAst *ast, int& value)
+    {
+        const TripleAst *triple = (const TripleAst *)ast;
+        if (triple->m_str != "?")
+        {
+            value = 0;
+            return false;
+        }
+        int first, second, third;
+        if (!eval_ast(triple->m_first, first) ||
+            !eval_ast(triple->m_second, second) ||
+            !eval_ast(triple->m_third, third))
+        {
+            value = 0;
+            return false;
+        }
+        value = first ? second : third;
+        return true;
+    }
+    inline bool eval_unary(const BaseAst *ast, int& value)
+    {
+        const UnaryAst *unary = (const UnaryAst *)ast;
+        if (!eval_ast(unary->m_arg, value))
+            return false;
+
+        if (unary->m_str == "+") value = value;
+        else if (unary->m_str == "-") value = -value;
+        else if (unary->m_str == "~") value = ~value;
+        else if (unary->m_str == "!") value = !value;
+        else if (unary->m_str == "+") value = value;
+        else if (unary->m_str == "+") value = value;
+        else return false;
+        return true;
+    }
+
+    inline bool eval_ast(const BaseAst *ast, int& value)
+    {
+        switch (ast->m_id)
+        {
+        case ASTID_BINARY:
+            return eval_binary(ast, value);
+        case ASTID_COMMA:
+            return eval_comma(ast, value);
+        case ASTID_IDENT:
+            return eval_ident(ast, value);
+        case ASTID_INTEGER:
+            return eval_integer(ast, value);
+        case ASTID_STRING:
+            return eval_string(ast, value);
+        case ASTID_TRIPLE:
+            return eval_triple(ast, value);
+        case ASTID_UNARY:
+            return eval_unary(ast, value);
+        default:
+            value = 0;
+            return false;
+        }
     }
 } // namespace MacroParser
 
